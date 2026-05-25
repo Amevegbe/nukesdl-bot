@@ -1,5 +1,4 @@
 import os
-import re
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ApplicationBuilder, MessageHandler, CommandHandler,
@@ -8,12 +7,14 @@ from telegram.ext import (
 from engine import download_video
 
 TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_ID = os.environ.get("ADMIN_ID")
 
-# Conversation states
+UNSUPPORTED = ["spotify.com", "apple.com/music", "deezer.com", "tidal.com"]
+
 MEDIA_TYPE, URL = range(2)
 
 MEDIA_KEYBOARD = ReplyKeyboardMarkup(
-    [["🎬 Video", "🎵 Audio", "🖼️ Picture"]],
+    [["🎬 Video", "🖼️ Picture"]],
     one_time_keyboard=True,
     resize_keyboard=True
 )
@@ -26,10 +27,17 @@ I can download from:
 - TikTok
 - Instagram
 - Facebook
+- Pinterest
 - Snapchat
 - Twitter/X
-NOTE:PINTEREST DOWNLOADS HAS NOT BEEN ADDED YET
+- And more!
 """
+
+
+async def send_error_to_admin(context: ContextTypes.DEFAULT_TYPE, error: str, url: str = None):
+    if ADMIN_ID:
+        message = f"⚠️ Bot Error\n\nURL: {url or 'N/A'}\n\nError:\n{error}"
+        await context.bot.send_message(chat_id=ADMIN_ID, text=message)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,8 +54,6 @@ async def media_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if "Video" in choice:
         context.user_data["media_type"] = "video"
-    elif "Audio" in choice:
-        context.user_data["media_type"] = "audio"
     elif "Picture" in choice:
         context.user_data["media_type"] = "picture"
     else:
@@ -74,6 +80,13 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not url.startswith("http"):
         url = "https://" + url
 
+    if any(platform in url for platform in UNSUPPORTED):
+        await update.message.reply_text(
+            "❌ This platform is not supported.\n\n"
+            "Try YouTube, TikTok, Instagram, Facebook, Pinterest, Twitter/X instead."
+        )
+        return await restart(update, context)
+
     media = context.user_data.get("media_type", "video")
     platform = detect_platform(url)
 
@@ -82,26 +95,25 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = download_video(url, platform, media)
 
     if not result["success"]:
-        await update.message.reply_text(f"Failed ❌\n{result['error']}")
+        await send_error_to_admin(context, result["error"], url)
+        await update.message.reply_text("❌ Something went wrong. Our team has been notified.")
         return await restart(update, context)
 
     file_path = result["file"]
+    file_type = result.get("type", media)
 
     try:
         await update.message.reply_text("Uploading... 📤")
-
         with open(file_path, "rb") as f:
-            if media == "video":
-                await update.message.reply_video(video=f)
-            elif media == "audio":
-                await update.message.reply_audio(audio=f)
-            elif media == "picture":
+            if file_type == "picture":
                 await update.message.reply_photo(photo=f)
-
+            else:
+                await update.message.reply_video(video=f)
         await update.message.reply_text("Done ✅")
 
     except Exception as e:
-        await update.message.reply_text(f"Upload failed ❌\n{str(e)}")
+        await send_error_to_admin(context, str(e), url)
+        await update.message.reply_text("❌ Upload failed. Our team has been notified.")
 
     finally:
         if os.path.exists(file_path):
