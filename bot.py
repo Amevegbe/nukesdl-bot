@@ -1,5 +1,5 @@
 import os
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, MessageHandler, CommandHandler,
     ContextTypes, filters, ConversationHandler
@@ -11,18 +11,12 @@ ADMIN_ID = os.environ.get("ADMIN_ID")
 
 UNSUPPORTED = ["spotify.com", "apple.com/music", "deezer.com", "tidal.com"]
 
-MEDIA_TYPE, URL = range(2)
-
-MEDIA_KEYBOARD = ReplyKeyboardMarkup(
-    [["🎬 Video", "🖼️ Picture"]],
-    one_time_keyboard=True,
-    resize_keyboard=True
-)
+URL = 0
 
 WELCOME = """
 👋 Welcome to NukesDL Bot!
 
-I can download from:
+I can download videos from:
 - YouTube
 - TikTok
 - Instagram
@@ -31,6 +25,8 @@ I can download from:
 - Snapchat
 - Twitter/X
 - And more!
+
+Just send me a URL to get started 🔗
 """
 
 
@@ -42,31 +38,6 @@ async def send_error_to_admin(context: ContextTypes.DEFAULT_TYPE, error: str, ur
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(WELCOME)
-    await update.message.reply_text(
-        "What do you want to download?",
-        reply_markup=MEDIA_KEYBOARD
-    )
-    return MEDIA_TYPE
-
-
-async def media_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    choice = update.message.text
-
-    if "Video" in choice:
-        context.user_data["media_type"] = "video"
-    elif "Picture" in choice:
-        context.user_data["media_type"] = "picture"
-    else:
-        await update.message.reply_text(
-            "Please choose from the options below.",
-            reply_markup=MEDIA_KEYBOARD
-        )
-        return MEDIA_TYPE
-
-    await update.message.reply_text(
-        "Now send me the URL 🔗",
-        reply_markup=ReplyKeyboardRemove()
-    )
     return URL
 
 
@@ -85,31 +56,25 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ This platform is not supported.\n\n"
             "Try YouTube, TikTok, Instagram, Facebook, Pinterest, Twitter/X instead."
         )
-        return await restart(update, context)
+        return URL
 
-    media = context.user_data.get("media_type", "video")
     platform = detect_platform(url)
+    await update.message.reply_text(f"Downloading from {platform}... ⏳")
 
-    await update.message.reply_text(f"Downloading {media} from {platform}... ⏳")
-
-    result = download_video(url, platform, media)
+    result = download_video(url, platform)
 
     if not result["success"]:
         await send_error_to_admin(context, result["error"], url)
         await update.message.reply_text("❌ Something went wrong. Our team has been notified.")
-        return await restart(update, context)
+        return URL
 
     file_path = result["file"]
-    file_type = result.get("type", media)
 
     try:
         await update.message.reply_text("Uploading... 📤")
         with open(file_path, "rb") as f:
-            if file_type == "picture":
-                await update.message.reply_photo(photo=f)
-            else:
-                await update.message.reply_video(video=f)
-        await update.message.reply_text("Done ✅")
+            await update.message.reply_video(video=f)
+        await update.message.reply_text("Done ✅ Send another URL to download more.")
 
     except Exception as e:
         await send_error_to_admin(context, str(e), url)
@@ -119,19 +84,11 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(file_path):
             os.remove(file_path)
 
-    return await restart(update, context)
-
-
-async def restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Want to download something else?",
-        reply_markup=MEDIA_KEYBOARD
-    )
-    return MEDIA_TYPE
+    return URL
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bye! Send /start to use me again. 👋", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("Bye! Send /start to use me again. 👋")
     return ConversationHandler.END
 
 
@@ -159,7 +116,6 @@ if __name__ == "__main__":
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            MEDIA_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, media_type)],
             URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
