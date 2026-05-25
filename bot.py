@@ -65,7 +65,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not result["success"]:
         await send_error_to_admin(context, result["error"], url)
-        await update.message.reply_text("❌ Something went wrong. Our team has been notified.")
+        await update.message.reply_text(f"❌ Download failed\n\n{result['error']}")
         return URL
 
     file_path = result["file"]
@@ -78,7 +78,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await send_error_to_admin(context, str(e), url)
-        await update.message.reply_text("❌ Upload failed. Our team has been notified.")
+        await update.message.reply_text(f"❌ Upload failed\n\n{str(e)}")
 
     finally:
         if os.path.exists(file_path):
