@@ -6,9 +6,8 @@ os.makedirs("downloads", exist_ok=True)
 
 def download_video(url, platform="general"):
     ydl_opts = {
-        "format": "best/bestvideo+bestaudio/bestvideo/bestaudio",
+        "format": "best[ext=mp4]/best[ext=webm]/best",  # single file, no merging needed
         "outtmpl": f"downloads/{platform}_%(title)s.%(ext)s",
-        "merge_output_format": "mp4",
     }
 
     try:
