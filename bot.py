@@ -26,10 +26,9 @@ I can download from:
 - TikTok
 - Instagram
 - Facebook
-- Pinterest
 - Snapchat
 - Twitter/X
-- And more!
+NOTE:PINTEREST DOWNLOADS HAS NOT BEEN ADDED YET
 """
 
 
