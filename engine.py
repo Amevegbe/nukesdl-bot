@@ -5,19 +5,26 @@ os.makedirs("downloads", exist_ok=True)
 
 
 def download_video(url, platform="general"):
-    # Try these format strategies one by one until one works
     format_attempts = [
         "best[ext=mp4]",
         "best[ext=webm]",
+        "best[ext=jpg]",
+        "best[ext=jpeg]",
+        "best[ext=png]",
+        "best[ext=webp]",
         "best[ext=mp4]/best[ext=webm]/best",
         "bestvideo+bestaudio/best",
-        "worst",  # last resort — any format available
+        "worst",
     ]
 
     for fmt in format_attempts:
         ydl_opts = {
             "format": fmt,
             "outtmpl": f"downloads/{platform}_%(title)s.%(ext)s",
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": "https://www.pinterest.com/",
+            },
         }
 
         try:
@@ -30,11 +37,9 @@ def download_video(url, platform="general"):
         except Exception as e:
             error_msg = str(e)
 
-            # If format not available, try next one
             if "Requested format is not available" in error_msg or "ffmpeg is not installed" in error_msg:
                 continue
 
-            # Any other error, stop and return immediately
             return {"success": False, "error": error_msg}
 
     return {"success": False, "error": "No compatible format found for this URL."}
