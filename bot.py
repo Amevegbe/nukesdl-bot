@@ -78,6 +78,10 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_video(video=f)
         await update.message.reply_text("Done ✅ Send another URL to download more.")
+        await update.message.reply_text(
+            "📢 Join our channel for updates and more!\n"
+            "👉 https://t.me/NukesUpdates"
+        )
 
     except Exception as e:
         await send_error_to_admin(context, str(e), url)
