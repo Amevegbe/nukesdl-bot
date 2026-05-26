@@ -73,7 +73,10 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.reply_text("Uploading... 📤")
         with open(file_path, "rb") as f:
-            await update.message.reply_video(video=f)
+            if file_path.endswith((".jpg", ".jpeg", ".png", ".webp")):
+                await update.message.reply_photo(photo=f)
+            else:
+                await update.message.reply_video(video=f)
         await update.message.reply_text("Done ✅ Send another URL to download more.")
 
     except Exception as e:
