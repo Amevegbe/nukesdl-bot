@@ -21,7 +21,7 @@ I can download videos from:
 - TikTok
 - Instagram
 - Facebook
-- Pinterest
+- Pinterest videos with comaptible formats
 - Snapchat
 - Twitter/X
 - And more!
