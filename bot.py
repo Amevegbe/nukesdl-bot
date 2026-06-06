@@ -39,6 +39,14 @@ async def send_error_to_admin(context: ContextTypes.DEFAULT_TYPE, error: str, ur
             print(f"Failed to notify admin: {e}")
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    print(f"Error: {context.error}")
+    try:
+        await context.bot.send_message(chat_id=int(ADMIN_ID), text=f"⚠️ Bot Error\n\n{context.error}")
+    except Exception:
+        pass
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(WELCOME)
     return URL
@@ -136,6 +144,8 @@ if __name__ == "__main__":
         .write_timeout(60)\
         .connect_timeout(60)\
         .build()
+
+    app.add_error_handler(error_handler)
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
