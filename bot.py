@@ -21,7 +21,7 @@ I can download videos from:
 - TikTok
 - Instagram
 - Facebook
-- Pinterest videos with comaptible formats
+- Pinterest
 - Snapchat
 - Twitter/X
 - And more!
@@ -32,8 +32,11 @@ Just send me a URL to get started 🔗
 
 async def send_error_to_admin(context: ContextTypes.DEFAULT_TYPE, error: str, url: str = None):
     if ADMIN_ID:
-        message = f"⚠️ Bot Error\n\nURL: {url or 'N/A'}\n\nError:\n{error}"
-        await context.bot.send_message(chat_id=ADMIN_ID, text=message)
+        try:
+            message = f"⚠️ Bot Error\n\nURL: {url or 'N/A'}\n\nError:\n{error}"
+            await context.bot.send_message(chat_id=int(ADMIN_ID), text=message)
+        except Exception as e:
+            print(f"Failed to notify admin: {e}")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -84,8 +87,17 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        await send_error_to_admin(context, str(e), url)
-        await update.message.reply_text(f"❌ Upload failed\n\n{str(e)}")
+        error_msg = str(e)
+        await send_error_to_admin(context, error_msg, url)
+
+        if "Request Entity Too Large" in error_msg:
+            await update.message.reply_text(
+                "❌ File too large to send.\n\n"
+                "Telegram only allows files up to 50MB.\n"
+                "Try a shorter video or lower quality URL."
+            )
+        else:
+            await update.message.reply_text(f"❌ Upload failed\n\n{error_msg}")
 
     finally:
         if os.path.exists(file_path):
@@ -118,7 +130,12 @@ def detect_platform(url: str) -> str:
 
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder()\
+        .token(TOKEN)\
+        .read_timeout(60)\
+        .write_timeout(60)\
+        .connect_timeout(60)\
+        .build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
