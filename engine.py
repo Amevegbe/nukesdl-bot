@@ -3,6 +3,8 @@ from yt_dlp import YoutubeDL
 
 os.makedirs("downloads", exist_ok=True)
 
+COOKIES_FILE = "cookies.txt" if os.path.exists("cookies.txt") else None
+
 
 def download_video(url, platform="general"):
     format_attempts = [
@@ -26,6 +28,9 @@ def download_video(url, platform="general"):
                 "Referer": "https://www.pinterest.com/",
             },
         }
+
+        if COOKIES_FILE:
+            ydl_opts["cookiefile"] = COOKIES_FILE
 
         try:
             with YoutubeDL(ydl_opts) as ydl:
