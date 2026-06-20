@@ -1,13 +1,24 @@
 import os
+import asyncio
+import logging
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, MessageHandler, CommandHandler,
     ContextTypes, filters, ConversationHandler
 )
-from engine import download_video
+from engine import download_video, MAX_FILESIZE_MB
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
+
+if not TOKEN:
+    raise SystemExit("BOT_TOKEN environment variable is not set.")
 
 UNSUPPORTED = ["spotify.com", "apple.com/music", "deezer.com", "tidal.com"]
 
@@ -30,19 +41,34 @@ Just send me a URL to get started 🔗
 """
 
 
+def _admin_id_int():
+    if not ADMIN_ID:
+        return None
+    try:
+        return int(ADMIN_ID)
+    except ValueError:
+        logger.warning("ADMIN_ID is set but not a valid integer: %r", ADMIN_ID)
+        return None
+
+
 async def send_error_to_admin(context: ContextTypes.DEFAULT_TYPE, error: str, url: str = None):
-    if ADMIN_ID:
-        try:
-            message = f"⚠️ Bot Error\n\nURL: {url or 'N/A'}\n\nError:\n{error}"
-            await context.bot.send_message(chat_id=int(ADMIN_ID), text=message)
-        except Exception as e:
-            print(f"Failed to notify admin: {e}")
+    admin_id = _admin_id_int()
+    if admin_id is None:
+        return
+    try:
+        message = f"⚠️ Bot Error\n\nURL: {url or 'N/A'}\n\nError:\n{error}"
+        await context.bot.send_message(chat_id=admin_id, text=message[:4000])
+    except Exception as e:
+        logger.warning("Failed to notify admin: %s", e)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    print(f"Error: {context.error}")
+    logger.error("Error: %s", context.error)
+    admin_id = _admin_id_int()
+    if admin_id is None:
+        return
     try:
-        await context.bot.send_message(chat_id=int(ADMIN_ID), text=f"⚠️ Bot Error\n\n{context.error}")
+        await context.bot.send_message(chat_id=admin_id, text=f"⚠️ Bot Error\n\n{context.error}"[:4000])
     except Exception:
         pass
 
@@ -69,10 +95,25 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return URL
 
+    # Prevent one user from queuing multiple concurrent downloads, which
+    # would otherwise spike disk/CPU usage unpredictably since downloads
+    # run in a thread executor (see below) and are not otherwise rate-limited.
+    if context.user_data.get("downloading"):
+        await update.message.reply_text("⏳ You already have a download in progress. Please wait for it to finish.")
+        return URL
+
     platform = detect_platform(url)
     await update.message.reply_text(f"Downloading from {platform}... ⏳")
 
-    result = download_video(url, platform)
+    context.user_data["downloading"] = True
+    try:
+        # download_video() is a blocking, synchronous call (network I/O +
+        # ffmpeg muxing). Running it directly here would block the entire
+        # bot's event loop for every other user. Offload it to a thread.
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, download_video, url, platform)
+    finally:
+        context.user_data["downloading"] = False
 
     if not result["success"]:
         await send_error_to_admin(context, result["error"], url)
@@ -82,9 +123,20 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_path = result["file"]
 
     try:
+        # Check size before attempting upload — avoids wasting time/bandwidth
+        # on an upload that Telegram will reject anyway.
+        size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if size_mb > MAX_FILESIZE_MB:
+            await update.message.reply_text(
+                f"❌ File too large to send ({size_mb:.1f}MB).\n\n"
+                f"Telegram only allows files up to {MAX_FILESIZE_MB}MB.\n"
+                "Try a shorter video or lower quality URL."
+            )
+            return URL
+
         await update.message.reply_text("Uploading... 📤")
         with open(file_path, "rb") as f:
-            if file_path.endswith((".jpg", ".jpeg", ".png", ".webp")):
+            if file_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
                 await update.message.reply_photo(photo=f)
             else:
                 await update.message.reply_video(video=f)
@@ -101,7 +153,7 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "Request Entity Too Large" in error_msg:
             await update.message.reply_text(
                 "❌ File too large to send.\n\n"
-                "Telegram only allows files up to 50MB.\n"
+                f"Telegram only allows files up to {MAX_FILESIZE_MB}MB.\n"
                 "Try a shorter video or lower quality URL."
             )
         else:
