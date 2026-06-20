@@ -1,3 +1,2 @@
-python-telegram-bot
-yt-dlp
-cowsay
+python-telegram-bot>=21.0
+yt-dlp>=2026.6.9
