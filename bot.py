@@ -117,7 +117,10 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not result["success"]:
         await send_error_to_admin(context, result["error"], url)
-        await update.message.reply_text(f"❌ Download failed\n\n{result['error']}")
+        await update.message.reply_text(
+            "❌ Something went wrong with that link.\n\n"
+            "Please try a different video URL."
+        )
         return URL
 
     file_path = result["file"]
@@ -157,7 +160,10 @@ async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Try a shorter video or lower quality URL."
             )
         else:
-            await update.message.reply_text(f"❌ Upload failed\n\n{error_msg}")
+            await update.message.reply_text(
+                "❌ Something went wrong while sending that file.\n\n"
+                "Please try a different video URL."
+            )
 
     finally:
         if os.path.exists(file_path):
